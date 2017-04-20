@@ -44,6 +44,11 @@ def pack_artifact(artifact, src_dir, dst_dir, linkdir = None):
 
     if linkdir == None or dst_dir == linkdir:
         pack_textures(xml, src_dir)
+        existsFunction = lambda src, _ = None: os.path.exists(os.path.join(src_dir, src))
+        copyFunction = lambda src, dst: shutil.copyfile(os.path.join(src_dir, src), os.path.join(dst_dir, dst))
+    else:
+        existsFunction = lambda src, srcNew = None: (srcNew != None and os.path.exists(os.path.join(linkdir, srcNew))) or os.path.exists(os.path.join(linkdir, src))
+        copyFunction = lambda src, dst: os.link(os.path.join(linkdir, dst), os.path.join(dst_dir, dst))
 
     # Copy asset files
     assets = xml.find("./extension[@point='kodi.addon.metadata']/assets")
@@ -54,17 +59,21 @@ def pack_artifact(artifact, src_dir, dst_dir, linkdir = None):
         for item in assets:
             if item.text:
                 makedirs_ignore_errors(os.path.join(dst_dir, os.path.dirname(item.text)))
-                shutil.copyfile(os.path.join(src_dir, item.text), os.path.join(dst_dir, item.text))
+                try:
+                    copyFunction(item.text, item.text)
+                except OSError, e:
+                    if e.errno != 17:
+                        raise 
 
     else:  # for backwards compatibility with add-ons that do not use the assets element
-        if os.path.exists(os.path.join(src_dir, "icon.png")):
-            shutil.copyfile(os.path.join(src_dir, "icon.png"), os.path.join(dst_dir, "icon.png"))
+        if existsFunction("icon.png"):
+            copyFunction("icon.png", "icon.png")
 
-        if os.path.exists(os.path.join(src_dir, "fanart.jpg")):
-            shutil.copyfile(os.path.join(src_dir, "fanart.jpg"), os.path.join(dst_dir, "fanart.jpg"))
+        if existsFunction("fanart.jpg"):
+            copyFunction("fanart.jpg", "fanart.jpg")
 
-        if os.path.exists(os.path.join(src_dir, "changelog.txt")):
-            shutil.copyfile(os.path.join(src_dir, "changelog.txt"), os.path.join(dst_dir, "changelog-%s.txt" % artifact.version))
+        if existsFunction("changelog.txt", "changelog-%s.txt" % artifact.version):
+            copyFunction("changelog.txt", "changelog-%s.txt" % artifact.version)
 
     # Write and compress files in src_dir to the final zip file
     dest_file = os.path.join(dst_dir, "%s-%s.zip" % (artifact.addon_id, artifact.version))
